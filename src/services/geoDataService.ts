@@ -1,5 +1,5 @@
 import { GeoJSONCollection, RegionData, DepartementData, CommuneData } from '../types/mapTypes';
-import { regionVacancyData, regionNameMapping, calculateDerivedMetrics } from '../data/realData';
+import { regionVacancyData, regionNameMapping, calculateDerivedMetrics, getDOMTOMDataByCode } from '../data/realData';
 import { departementVacancyData, calculateDepartementDerivedMetrics } from '../data/departementData';
 import { communeVacancyData, calculateCommuneDerivedMetrics } from '../data/communeData';
 import { REGION_DEPARTEMENT_MAPPING } from '../data/regionDepartementMapping';
@@ -352,9 +352,17 @@ class GeoDataService {
       if (type === 'france' && featureCode === 'FR') {
         // Données déjà enrichies lors de la création
         return feature;
-      } else if (type === 'region' && featureName) {
-        // Utiliser les vraies données pour les régions (incluant DOM-TOM)
-        const realData = calculateDerivedMetrics(featureName);
+      } else if (type === 'region' && (featureName || featureCode)) {
+        // Pour les DOM-TOM, utiliser le code, sinon le nom
+        let realData = null;
+        
+        if (['971', '972', '973', '974', '976'].includes(featureCode)) {
+          // DOM-TOM : utiliser le code pour récupérer les données
+          realData = getDOMTOMDataByCode(featureCode);
+        } else if (featureName) {
+          // Métropole : utiliser le nom
+          realData = calculateDerivedMetrics(featureName);
+        }
         
         if (realData) {
           return {
@@ -368,8 +376,8 @@ class GeoDataService {
               tauxVacancePour1000: realData.tauxVacancePour1000,
               vacanceParKm2: realData.vacanceParKm2,
               // Marquer les DOM-TOM (région = département)
-              isDOMTOM: ['971', '972', '973', '974', '976'].includes(featureCode),
-              isRegionDepartement: ['971', '972', '973', '974', '976'].includes(featureCode),
+              isDOMTOM: realData.isDOMTOM,
+              isRegionDepartement: realData.isRegionDepartement,
               // Garder quelques métriques générées pour la démonstration
               economicIndex: Math.round(Math.random() * 40 + 60),
               tourismScore: Math.round(Math.random() * 50 + 50)

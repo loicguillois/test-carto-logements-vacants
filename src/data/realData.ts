@@ -1,5 +1,6 @@
 // Données réelles de logements vacants de plus de 2 ans en 2025 par région
 export const regionVacancyData = {
+  // DOM-TOM (Départements et Régions d'outre-mer)
   'Guadeloupe': {
     pp_vacant_plus_2ans_25: 16528,
     population: 384239,
@@ -25,6 +26,7 @@ export const regionVacancyData = {
     population: 279471,
     superficie: 374
   },
+  // Régions métropolitaines
   'Île-de-France': {
     pp_vacant_plus_2ans_25: 134275,
     population: 12278210,
@@ -94,6 +96,13 @@ export const regionVacancyData = {
 
 // Mapping des noms de régions pour correspondre aux données GeoJSON
 export const regionNameMapping: Record<string, string> = {
+  // DOM-TOM (Région = Département)
+  'Guadeloupe': 'Guadeloupe',
+  'Martinique': 'Martinique',
+  'Guyane': 'Guyane',
+  'La Réunion': 'La Réunion',
+  'Mayotte': 'Mayotte',
+  // Régions métropolitaines
   'Île-de-France': 'Île-de-France',
   'Centre-Val de Loire': 'Centre-Val de Loire',
   'Bourgogne-Franche-Comté': 'Bourgogne-Franche-Comté',
@@ -106,17 +115,23 @@ export const regionNameMapping: Record<string, string> = {
   'Occitanie': 'Occitanie',
   'Auvergne-Rhône-Alpes': 'Auvergne-Rhône-Alpes',
   'Provence-Alpes-Côte d\'Azur': 'Provence-Alpes-Côte d\'Azur',
-  'Corse': 'Corse',
-  'Guadeloupe': 'Guadeloupe',
-  'Martinique': 'Martinique',
-  'Guyane': 'Guyane',
-  'La Réunion': 'La Réunion',
-  'Mayotte': 'Mayotte'
+  'Corse': 'Corse'
+};
+
+// Mapping des codes DOM-TOM (région = département)
+export const domtomCodeMapping: Record<string, string> = {
+  '971': 'Guadeloupe',
+  '972': 'Martinique',
+  '973': 'Guyane',
+  '974': 'La Réunion',
+  '976': 'Mayotte'
 };
 
 export const calculateDerivedMetrics = (regionName: string) => {
   const data = regionVacancyData[regionName as keyof typeof regionVacancyData];
   if (!data) return null;
+
+  const isDOMTOM = ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(regionName);
 
   return {
     ...data,
@@ -125,6 +140,17 @@ export const calculateDerivedMetrics = (regionName: string) => {
     // Densité de population
     densite: Math.round(data.population / data.superficie),
     // Ratio vacance/superficie (logements vacants par km²)
-    vacanceParKm2: Math.round(data.pp_vacant_plus_2ans_25 / data.superficie * 100) / 100
+    vacanceParKm2: Math.round(data.pp_vacant_plus_2ans_25 / data.superficie * 100) / 100,
+    // Marquer les DOM-TOM
+    isDOMTOM,
+    isRegionDepartement: isDOMTOM
   };
+};
+
+// Fonction pour obtenir les données par code DOM-TOM
+export const getDOMTOMDataByCode = (code: string) => {
+  const regionName = domtomCodeMapping[code];
+  if (!regionName) return null;
+  
+  return calculateDerivedMetrics(regionName);
 };
