@@ -5,6 +5,7 @@ import { MapMetric, ViewState, GeoJSONCollection } from '../types/mapTypes';
 import { MapLegend } from './MapLegend';
 import { RegionTooltip } from './RegionTooltip';
 import { ZoomInfo } from './ZoomInfo';
+import { SearchBar } from './SearchBar';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const INITIAL_VIEW_STATE: ViewState = {
@@ -263,6 +264,48 @@ export const FranceMap: React.FC = () => {
     setSelectedFeature(null);
   }, []);
 
+  // Gestion de la sélection depuis la recherche
+  const handleSearchResultSelect = useCallback((result: any) => {
+    if (result.centroid) {
+      // Déterminer le niveau de zoom selon le type de territoire
+      let targetZoom = 6;
+      if (result.type === 'region') {
+        targetZoom = 6.5;
+      } else if (result.type === 'departement') {
+        targetZoom = 8;
+      } else if (result.type === 'commune') {
+        targetZoom = 10;
+      }
+
+      // Centrer et zoomer sur le territoire
+      setViewState(prev => ({
+        ...prev,
+        longitude: result.centroid[0],
+        latitude: result.centroid[1],
+        zoom: targetZoom
+      }));
+
+      // Trouver et sélectionner la feature correspondante
+      const findFeatureInData = (data: GeoJSONCollection | null, code: string) => {
+        if (!data) return null;
+        return data.features.find(f => f.properties?.code === code);
+      };
+
+      let foundFeature = null;
+      if (result.type === 'region' && regionsData) {
+        foundFeature = findFeatureInData(regionsData, result.code);
+      } else if (result.type === 'departement' && departementsData) {
+        foundFeature = findFeatureInData(departementsData, result.code);
+      } else if (result.type === 'commune' && communesData) {
+        foundFeature = findFeatureInData(communesData, result.code);
+      }
+
+      if (foundFeature) {
+        setSelectedFeature(foundFeature);
+      }
+    }
+  }, [regionsData, departementsData, communesData]);
+
   // Configuration des couches
   const createLayerConfig = (layerId: string, strokeWidth: number = 1) => ({
     fill: {
@@ -383,12 +426,19 @@ export const FranceMap: React.FC = () => {
   const layerConfigs = createLayerConfig('active');
   const labelsData = processedData ? createLabelsData(processedData) : null;
 
+  // Préparer les données pour la recherche
+  const searchFeatures = {
+    regions: regionsData?.features || [],
+    departements: departementsData?.features || [],
+    communes: communesData?.features || []
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
+      {/* Header avec barre de recherche */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-white/90 backdrop-blur-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="text-center">
+          <div className="text-center mb-4">
             <h1 className="text-3xl font-bold text-gray-800 mb-1">
               Carte des logements vacants de plus de 2 ans en France
             </h1>
@@ -396,11 +446,19 @@ export const FranceMap: React.FC = () => {
               Logements vacants de plus de 2 ans (2025) • Contours officiels open data • Zoomez pour naviguer entre les niveaux
             </p>
           </div>
+          
+          {/* Barre de recherche centrée */}
+          <div className="flex justify-center">
+            <SearchBar
+              onResultSelect={handleSearchResultSelect}
+              allFeatures={searchFeatures}
+            />
+          </div>
         </div>
       </div>
 
       {/* Map Container */}
-      <div className="relative w-full h-screen pt-20">
+      <div className="relative w-full h-screen pt-32">
         <Map
           {...viewState}
           onMove={evt => setViewState(evt.viewState)}
