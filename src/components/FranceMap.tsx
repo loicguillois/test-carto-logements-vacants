@@ -2,10 +2,8 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import Map, { Source, Layer } from 'react-map-gl/maplibre';
 import { geoDataService } from '../services/geoDataService';
 import { MapMetric, ViewState, GeoJSONCollection } from '../types/mapTypes';
-import { MapControls } from './MapControls';
 import { MapLegend } from './MapLegend';
 import { RegionTooltip } from './RegionTooltip';
-import { MapStats } from './MapStats';
 import { ZoomInfo } from './ZoomInfo';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -49,33 +47,6 @@ export const FranceMap: React.FC = () => {
     unit: 'logements',
     format: (value: number) => value.toLocaleString('fr-FR')
   });
-
-  const availableMetrics: MapMetric[] = [
-    {
-      key: 'pp_vacant_plus_2ans_25',
-      label: 'Logements vacants +2 ans',
-      unit: 'logements',
-      format: (value: number) => value.toLocaleString('fr-FR')
-    },
-    {
-      key: 'tauxVacancePour1000',
-      label: 'Taux de vacance',
-      unit: '‰ hab.',
-      format: (value: number) => `${value}‰`
-    },
-    {
-      key: 'vacanceParKm2',
-      label: 'Vacance par km²',
-      unit: 'logements/km²',
-      format: (value: number) => `${value} logements/km²`
-    },
-    {
-      key: 'densite',
-      label: 'Densité de population',
-      unit: 'hab./km²',
-      format: (value: number) => `${value} hab./km²`
-    }
-  ];
 
   // Charger toutes les données géographiques au démarrage
   useEffect(() => {
@@ -465,30 +436,11 @@ export const FranceMap: React.FC = () => {
           onResetView={resetToFranceView}
         />
 
-        {/* Contrôles de la carte */}
-        <MapControls
-          currentMetric={currentMetric}
-          onMetricChange={setCurrentMetric}
-          availableMetrics={availableMetrics}
-          showLabels={showLabels}
-          onToggleLabels={() => setShowLabels(!showLabels)}
-          opacity={opacity}
-          onOpacityChange={setOpacity}
-        />
-
         {/* Légende */}
         <MapLegend
           currentMetric={currentMetric}
           minValue={minValue}
           maxValue={maxValue}
-        />
-
-        {/* Panneau de statistiques */}
-        <MapStats
-          features={processedData?.features || []}
-          selectedFeature={selectedFeature}
-          onFeatureSelect={setSelectedFeature}
-          zoomLevel={activeDataInfo?.type || 'france'}
         />
 
         {/* Tooltip */}
