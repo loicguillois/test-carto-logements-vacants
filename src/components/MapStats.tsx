@@ -38,7 +38,8 @@ export const MapStats: React.FC<MapStatsProps> = ({
       totalSuperficie,
       domtomVacants,
       domtomPopulation,
-      hasDOMTOM: domtomFeatures.length > 0
+      hasDOMTOM: domtomFeatures.length > 0,
+      domtomCount: domtomFeatures.length
     };
   };
 
@@ -52,6 +53,7 @@ export const MapStats: React.FC<MapStatsProps> = ({
     ['971', '972', '973', '974', '976'].includes(properties?.code) ||
     ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(properties?.nom)
   );
+  const isRegionDepartement = properties?.isRegionDepartement || isDOMTOM;
 
   const getStatsForLevel = () => {
     if (selectedFeature && properties) {
@@ -156,7 +158,7 @@ export const MapStats: React.FC<MapStatsProps> = ({
         if (globalStats.hasDOMTOM && globalStats.domtomVacants > 0) {
           baseStats.push({
             icon: Anchor,
-            label: 'Vacance DOM-TOM',
+            label: `Vacance DOM-TOM (${globalStats.domtomCount})`,
             value: formatNumber(globalStats.domtomVacants),
             color: 'text-orange-600',
             bgColor: 'bg-orange-50'
@@ -193,7 +195,7 @@ export const MapStats: React.FC<MapStatsProps> = ({
   const getTerritoryCount = () => {
     if (!globalStats) return '';
     
-    const domtomSuffix = globalStats.hasDOMTOM ? ' (incluant DOM-TOM)' : '';
+    const domtomSuffix = globalStats.hasDOMTOM ? ` (incluant ${globalStats.domtomCount} DOM-TOM)` : '';
     
     switch (zoomLevel) {
       case 'france': return '1 territoire national';
@@ -276,12 +278,23 @@ export const MapStats: React.FC<MapStatsProps> = ({
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-1 mb-2">
             <Anchor className="w-4 h-4 text-orange-600" />
-            <span className="text-xs font-medium text-orange-800">Territoire d'outre-mer</span>
+            <span className="text-xs font-medium text-orange-800">Collectivité d'outre-mer</span>
           </div>
+          {isRegionDepartement && (
+            <div className="flex items-center gap-1 mb-2">
+              <Building2 className="w-4 h-4 text-purple-600" />
+              <span className="text-xs font-medium text-purple-800">Région = Département</span>
+            </div>
+          )}
           <div className="text-xs text-gray-500">
             <p className="mb-1">
-              <strong>Statut:</strong> Département/Région d'outre-mer français
+              <strong>Statut:</strong> Collectivité territoriale française
             </p>
+            {isRegionDepartement && (
+              <p className="mb-1 text-purple-600">
+                <strong>Administration:</strong> Région et département confondus
+              </p>
+            )}
             {properties?.tauxVacancePour1000 && (
               <p className="mb-1">
                 <strong>Taux local:</strong> {properties.tauxVacancePour1000}‰ habitants

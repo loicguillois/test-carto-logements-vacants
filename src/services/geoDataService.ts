@@ -200,10 +200,11 @@ class GeoDataService {
   }
 
   private createDOMTOMRegions() {
+    // Pour les DOM-TOM, région = département
     return [
       {
         type: 'Feature' as const,
-        properties: { code: '01', nom: 'Guadeloupe' },
+        properties: { code: '971', nom: 'Guadeloupe' }, // Code département = code région
         geometry: {
           type: 'Polygon' as const,
           coordinates: [[[-61.8, 15.8], [-61.0, 15.8], [-61.0, 16.5], [-61.8, 16.5], [-61.8, 15.8]]]
@@ -211,7 +212,7 @@ class GeoDataService {
       },
       {
         type: 'Feature' as const,
-        properties: { code: '02', nom: 'Martinique' },
+        properties: { code: '972', nom: 'Martinique' },
         geometry: {
           type: 'Polygon' as const,
           coordinates: [[[-61.2, 14.4], [-60.8, 14.4], [-60.8, 14.9], [-61.2, 14.9], [-61.2, 14.4]]]
@@ -219,7 +220,7 @@ class GeoDataService {
       },
       {
         type: 'Feature' as const,
-        properties: { code: '03', nom: 'Guyane' },
+        properties: { code: '973', nom: 'Guyane' },
         geometry: {
           type: 'Polygon' as const,
           coordinates: [[[-54.6, 2.1], [-51.6, 2.1], [-51.6, 5.8], [-54.6, 5.8], [-54.6, 2.1]]]
@@ -227,7 +228,7 @@ class GeoDataService {
       },
       {
         type: 'Feature' as const,
-        properties: { code: '04', nom: 'La Réunion' },
+        properties: { code: '974', nom: 'La Réunion' },
         geometry: {
           type: 'Polygon' as const,
           coordinates: [[[55.2, -21.4], [55.8, -21.4], [55.8, -20.9], [55.2, -20.9], [55.2, -21.4]]]
@@ -235,7 +236,7 @@ class GeoDataService {
       },
       {
         type: 'Feature' as const,
-        properties: { code: '06', nom: 'Mayotte' },
+        properties: { code: '976', nom: 'Mayotte' },
         geometry: {
           type: 'Polygon' as const,
           coordinates: [[[45.0, -13.0], [45.3, -13.0], [45.3, -12.6], [45.0, -12.6], [45.0, -13.0]]]
@@ -281,8 +282,9 @@ class GeoDataService {
       );
 
       // Si les DOM-TOM ne sont pas inclus, les ajouter manuellement
+      // IMPORTANT: Pour les DOM-TOM, on utilise les mêmes contours que les régions
       if (!hasDOMTOM) {
-        data.features.push(...this.createDOMTOMDepartements());
+        data.features.push(...this.createDOMTOMRegions()); // Même géométrie que les régions
       }
 
       this.cache.set(cacheKey, data);
@@ -295,55 +297,20 @@ class GeoDataService {
     }
   }
 
-  private createDOMTOMDepartements() {
-    return [
-      {
-        type: 'Feature' as const,
-        properties: { code: '971', nom: 'Guadeloupe' },
-        geometry: {
-          type: 'MultiPolygon' as const,
-          coordinates: [[[[-61.8, 15.8], [-61.0, 15.8], [-61.0, 16.5], [-61.8, 16.5], [-61.8, 15.8]]]]
-        }
-      },
-      {
-        type: 'Feature' as const,
-        properties: { code: '972', nom: 'Martinique' },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [[[-61.2, 14.4], [-60.8, 14.4], [-60.8, 14.9], [-61.2, 14.9], [-61.2, 14.4]]]
-        }
-      },
-      {
-        type: 'Feature' as const,
-        properties: { code: '973', nom: 'Guyane' },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [[[-54.6, 2.1], [-51.6, 2.1], [-51.6, 5.8], [-54.6, 5.8], [-54.6, 2.1]]]
-        }
-      },
-      {
-        type: 'Feature' as const,
-        properties: { code: '974', nom: 'La Réunion' },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [[[55.2, -21.4], [55.8, -21.4], [55.8, -20.9], [55.2, -20.9], [55.2, -21.4]]]
-        }
-      },
-      {
-        type: 'Feature' as const,
-        properties: { code: '976', nom: 'Mayotte' },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [[[45.0, -13.0], [45.3, -13.0], [45.3, -12.6], [45.0, -12.6], [45.0, -13.0]]]
-        }
-      }
-    ];
-  }
-
   async getDepartementsForRegion(regionCode: string): Promise<GeoJSONCollection> {
     const allDepartements = await this.getDepartements();
     
-    // Trouver le nom de la région à partir du code
+    // Pour les DOM-TOM, région = département
+    if (['971', '972', '973', '974', '976'].includes(regionCode)) {
+      return {
+        type: 'FeatureCollection',
+        features: allDepartements.features.filter(
+          feature => feature.properties.code === regionCode
+        )
+      };
+    }
+    
+    // Pour la métropole, utiliser le mapping classique
     const allRegions = await this.getRegions();
     const region = allRegions.features.find(f => f.properties.code === regionCode);
     const regionName = region?.properties?.nom;
@@ -400,8 +367,9 @@ class GeoDataService {
               pp_vacant_plus_2ans_25: realData.pp_vacant_plus_2ans_25,
               tauxVacancePour1000: realData.tauxVacancePour1000,
               vacanceParKm2: realData.vacanceParKm2,
-              // Marquer les DOM-TOM
-              isDOMTOM: ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(featureName),
+              // Marquer les DOM-TOM (région = département)
+              isDOMTOM: ['971', '972', '973', '974', '976'].includes(featureCode),
+              isRegionDepartement: ['971', '972', '973', '974', '976'].includes(featureCode),
               // Garder quelques métriques générées pour la démonstration
               economicIndex: Math.round(Math.random() * 40 + 60),
               tourismScore: Math.round(Math.random() * 50 + 50)
@@ -423,8 +391,9 @@ class GeoDataService {
               pp_vacant_plus_2ans_25: realData.pp_vacant_plus_2ans_25,
               tauxVacancePour1000: realData.tauxVacancePour1000,
               vacanceParKm2: realData.vacanceParKm2,
-              // Marquer les DOM-TOM
+              // Marquer les DOM-TOM (région = département)
               isDOMTOM: ['971', '972', '973', '974', '976'].includes(featureCode),
+              isRegionDepartement: ['971', '972', '973', '974', '976'].includes(featureCode),
               // Garder quelques métriques générées pour la démonstration
               economicIndex: Math.round(Math.random() * 40 + 60),
               tourismScore: Math.round(Math.random() * 50 + 50)
@@ -471,6 +440,7 @@ class GeoDataService {
           tauxVacancePour1000: Math.round(Math.random() * 50 + 10),
           vacanceParKm2: Math.round(Math.random() * 10 + 1),
           isDOMTOM: false,
+          isRegionDepartement: false,
           economicIndex: Math.round(Math.random() * 40 + 60),
           tourismScore: Math.round(Math.random() * 50 + 50)
         }
