@@ -192,21 +192,20 @@ export const departementVacancyData = {
   '94': { pp_vacant_plus_2ans_25: 13711, population: 1387926, superficie: 245 },
   // Val-d'Oise
   '95': { pp_vacant_plus_2ans_25: 10550, population: 1249755, superficie: 1246 },
-  // Guadeloupe
-  '971': { pp_vacant_plus_2ans_25: 16528, population: 384239, superficie: 1628 },
-  // Martinique
-  '972': { pp_vacant_plus_2ans_25: 17634, population: 364508, superficie: 1128 },
-  // Guyane
-  '973': { pp_vacant_plus_2ans_25: 7738, population: 290691, superficie: 83534 },
-  // La Réunion
-  '974': { pp_vacant_plus_2ans_25: 13171, population: 873311, superficie: 2512 },
-  // Mayotte
-  '976': { pp_vacant_plus_2ans_25: 2960, population: 279471, superficie: 374 }
+  
+  // DOM-TOM : Utiliser les MÊMES données qu'au niveau régions (région = département)
+  '971': { pp_vacant_plus_2ans_25: 16528, population: 384239, superficie: 1628 }, // Guadeloupe
+  '972': { pp_vacant_plus_2ans_25: 17634, population: 364508, superficie: 1128 }, // Martinique
+  '973': { pp_vacant_plus_2ans_25: 7738, population: 290691, superficie: 83534 }, // Guyane
+  '974': { pp_vacant_plus_2ans_25: 13171, population: 873311, superficie: 2512 }, // La Réunion
+  '976': { pp_vacant_plus_2ans_25: 2960, population: 279471, superficie: 374 }    // Mayotte
 };
 
 export const calculateDepartementDerivedMetrics = (departementCode: string) => {
   const data = departementVacancyData[departementCode as keyof typeof departementVacancyData];
   if (!data) return null;
+
+  const isDOMTOM = ['971', '972', '973', '974', '976'].includes(departementCode);
 
   return {
     ...data,
@@ -215,6 +214,9 @@ export const calculateDepartementDerivedMetrics = (departementCode: string) => {
     // Densité de population
     densite: Math.round(data.population / data.superficie),
     // Ratio vacance/superficie (logements vacants par km²)
-    vacanceParKm2: Math.round(data.pp_vacant_plus_2ans_25 / data.superficie * 100) / 100
+    vacanceParKm2: Math.round(data.pp_vacant_plus_2ans_25 / data.superficie * 100) / 100,
+    // Marquer les DOM-TOM (région = département)
+    isDOMTOM,
+    isRegionDepartement: isDOMTOM
   };
 };
