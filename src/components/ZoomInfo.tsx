@@ -4,6 +4,7 @@ import { ZoomIn, ZoomOut, Home, Info } from 'lucide-react';
 interface ZoomInfoProps {
   currentZoom: number;
   visibleLayers: {
+    showFrance: boolean;
     showRegions: boolean;
     showDepartements: boolean;
     showCommunes: boolean;
@@ -20,7 +21,8 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
   const getCurrentLevel = () => {
     if (visibleLayers.showCommunes) return 'Communes';
     if (visibleLayers.showDepartements) return 'Départements';
-    return 'Régions';
+    if (visibleLayers.showRegions) return 'Régions';
+    return 'France entière';
   };
 
   const getZoomInstructions = () => {
@@ -30,7 +32,23 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
     if (visibleLayers.showDepartements) {
       return 'Zoomez pour voir les communes';
     }
-    return 'Zoomez pour voir les départements';
+    if (visibleLayers.showRegions) {
+      return 'Zoomez pour voir les départements';
+    }
+    return 'Zoomez pour voir les régions';
+  };
+
+  const getDataDescription = () => {
+    if (visibleLayers.showCommunes) {
+      return 'Données détaillées par commune';
+    }
+    if (visibleLayers.showDepartements) {
+      return 'Données agrégées par département';
+    }
+    if (visibleLayers.showRegions) {
+      return 'Données agrégées par région';
+    }
+    return 'Données nationales agrégées';
   };
 
   return (
@@ -48,8 +66,11 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
         <div className="text-lg font-medium text-gray-800 mb-1">
           {getCurrentLevel()}
         </div>
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 mb-1">
           Zoom: {currentZoom.toFixed(1)}x
+        </div>
+        <div className="text-xs text-gray-500">
+          {getDataDescription()}
         </div>
       </div>
 
@@ -57,17 +78,18 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
       <div className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <ZoomOut className="w-4 h-4 text-gray-400" />
-          <div className="flex-1 h-2 bg-gray-200 rounded-full relative">
+          <div className="flex-1 h-3 bg-gray-200 rounded-full relative">
             {/* Seuils de zoom */}
-            <div className="absolute left-0 top-0 w-1 h-full bg-green-500 rounded-l-full" />
-            <div className="absolute left-1/3 top-0 w-1 h-full bg-blue-500" />
-            <div className="absolute left-2/3 top-0 w-1 h-full bg-purple-500" />
+            <div className="absolute left-0 top-0 w-1 h-full bg-blue-600 rounded-l-full" title="France" />
+            <div className="absolute left-1/4 top-0 w-1 h-full bg-green-500" title="Régions" />
+            <div className="absolute left-2/4 top-0 w-1 h-full bg-yellow-500" title="Départements" />
+            <div className="absolute left-3/4 top-0 w-1 h-full bg-purple-500" title="Communes" />
             
             {/* Position actuelle */}
             <div 
-              className="absolute top-0 w-3 h-2 bg-red-500 rounded-full transform -translate-x-1/2"
+              className="absolute top-0 w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 border-2 border-white shadow-md"
               style={{ 
-                left: `${Math.min(Math.max((currentZoom - 4) / 8 * 100, 0), 100)}%` 
+                left: `${Math.min(Math.max((currentZoom - 3) / 9 * 100, 0), 100)}%` 
               }}
             />
           </div>
@@ -75,10 +97,11 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
         </div>
         
         {/* Légende des seuils */}
-        <div className="flex justify-between text-xs text-gray-500">
-          <span>Régions</span>
-          <span>Départements</span>
-          <span>Communes</span>
+        <div className="grid grid-cols-4 gap-1 text-xs text-gray-500">
+          <span className="text-center">France</span>
+          <span className="text-center">Régions</span>
+          <span className="text-center">Départements</span>
+          <span className="text-center">Communes</span>
         </div>
       </div>
 
@@ -87,6 +110,19 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
         <p className="text-sm text-blue-800">
           {getZoomInstructions()}
         </p>
+      </div>
+
+      {/* Statistiques du niveau actuel */}
+      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+          Niveau de données
+        </div>
+        <div className="text-sm text-gray-700">
+          {visibleLayers.showFrance && '1 territoire national'}
+          {visibleLayers.showRegions && '18 régions françaises'}
+          {visibleLayers.showDepartements && '101 départements'}
+          {visibleLayers.showCommunes && '~35 000 communes'}
+        </div>
       </div>
 
       {/* Actions rapides */}
@@ -105,7 +141,8 @@ export const ZoomInfo: React.FC<ZoomInfoProps> = ({
         <div className="text-xs text-gray-500 space-y-1">
           <p>• Utilisez la molette pour zoomer/dézoomer</p>
           <p>• Cliquez sur un territoire pour le centrer</p>
-          <p>• Les données s'adaptent automatiquement au zoom</p>
+          <p>• Les données s'agrègent automatiquement</p>
+          <p>• 4 niveaux : France → Régions → Départements → Communes</p>
         </div>
       </div>
     </div>

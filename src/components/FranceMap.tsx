@@ -7,28 +7,31 @@ import { MapLegend } from './MapLegend';
 import { RegionTooltip } from './RegionTooltip';
 import { MapStats } from './MapStats';
 import { ZoomInfo } from './ZoomInfo';
+import { franceGeoJSON } from '../data/franceData';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const INITIAL_VIEW_STATE: ViewState = {
   longitude: 2.2137,
   latitude: 46.6034,
-  zoom: 5.5,
+  zoom: 4.5, // Zoom initial plus large pour voir la France entière
   bearing: 0,
   pitch: 0
 };
 
 // Seuils de zoom pour l'affichage des différents niveaux
 const ZOOM_THRESHOLDS = {
-  REGIONS_ONLY: 5.5,
+  FRANCE_ONLY: 4.5,
+  REGIONS_VISIBLE: 5.5,
   DEPARTEMENTS_VISIBLE: 6.5,
   COMMUNES_VISIBLE: 8.5,
-  LABELS_VISIBLE: 7.0
+  LABELS_VISIBLE: 6.0
 };
 
 export const FranceMap: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>(INITIAL_VIEW_STATE);
   
   // Données géographiques pour tous les niveaux
+  const [franceData, setFranceData] = useState<GeoJSONCollection | null>(null);
   const [regionsData, setRegionsData] = useState<GeoJSONCollection | null>(null);
   const [departementsData, setDepartementsData] = useState<GeoJSONCollection | null>(null);
   const [communesData, setCommunesData] = useState<GeoJSONCollection | null>(null);
@@ -66,6 +69,12 @@ export const FranceMap: React.FC = () => {
       label: 'Vacance par km²',
       unit: 'logements/km²',
       format: (value: number) => `${value} logements/km²`
+    },
+    {
+      key: 'densite',
+      label: 'Densité de population',
+      unit: 'hab./km²',
+      format: (value: number) => `${value} hab./km²`
     }
   ];
 
@@ -76,7 +85,10 @@ export const FranceMap: React.FC = () => {
       setError(null);
       
       try {
-        // Charger toutes les données en parallèle
+        // Charger les données France
+        setFranceData(franceGeoJSON);
+
+        // Charger toutes les autres données en parallèle
         const [regions, departements, communes] = await Promise.all([
           geoDataService.getRegions(),
           geoDataService.getDepartements(),
@@ -117,7 +129,8 @@ export const FranceMap: React.FC = () => {
   const getVisibleLayers = useCallback(() => {
     const zoom = viewState.zoom;
     return {
-      showRegions: zoom < ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
+      showFrance: zoom < ZOOM_THRESHOLDS.REGIONS_VISIBLE,
+      showRegions: zoom >= ZOOM_THRESHOLDS.REGIONS_VISIBLE && zoom < ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
       showDepartements: zoom >= ZOOM_THRESHOLDS.DEPARTEMENTS_VISIBLE && zoom < ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
       showCommunes: zoom >= ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
       showLabels: showLabels && zoom >= ZOOM_THRESHOLDS.LABELS_VISIBLE
@@ -132,11 +145,13 @@ export const FranceMap: React.FC = () => {
       return { data: communesData, type: 'communes' as const };
     } else if (visibleLayers.showDepartements && departementsData) {
       return { data: departementsData, type: 'departements' as const };
-    } else if (regionsData) {
+    } else if (visibleLayers.showRegions && regionsData) {
       return { data: regionsData, type: 'regions' as const };
+    } else if (visibleLayers.showFrance && franceData) {
+      return { data: franceData, type: 'france' as const };
     }
     return null;
-  }, [visibleLayers, regionsData, departementsData, communesData]);
+  }, [visibleLayers, franceData, regionsData, departementsData, communesData]);
 
   const activeDataInfo = getActiveData();
 
@@ -145,6 +160,26 @@ export const FranceMap: React.FC = () => {
     if (!activeDataInfo) return { minValue: 0, maxValue: 100, processedData: null };
 
     const { data } = activeDataInfo;
+    
+    // Pour le niveau France, utiliser des valeurs fixes pour la coloration
+    if (activeDataInfo.type === 'france') {
+      const franceFeature = data.features[0];
+      const value = franceFeature.properties?.[currentMetric.key] || 0;
+      
+      const processedFrance = {
+        ...data,
+        features: [{
+          ...franceFeature,
+          properties: {
+            ...franceFeature.properties,
+            color: 'rgb(59, 130, 246)' // Bleu pour représenter la France entière
+          }
+        }]
+      };
+      
+      return { minValue: value, maxValue: value, processedData: processedFrance };
+    }
+
     const values = data.features
       .map(f => f.properties?.[currentMetric.key] || 0)
       .filter(v => v > 0);
@@ -233,7 +268,9 @@ export const FranceMap: React.FC = () => {
 
         // Déterminer le niveau de zoom approprié
         let targetZoom = viewState.zoom + 1.5;
-        if (visibleLayers.showRegions) {
+        if (visibleLayers.showFrance) {
+          targetZoom = Math.max(ZOOM_THRESHOLDS.REGIONS_VISIBLE + 0.5, targetZoom);
+        } else if (visibleLayers.showRegions) {
           targetZoom = Math.max(ZOOM_THRESHOLDS.DEPARTEMENTS_VISIBLE + 0.5, targetZoom);
         } else if (visibleLayers.showDepartements) {
           targetZoom = Math.max(ZOOM_THRESHOLDS.COMMUNES_VISIBLE + 0.5, targetZoom);
@@ -332,13 +369,13 @@ export const FranceMap: React.FC = () => {
     layout: {
       'text-field': ['get', 'nom'],
       'text-font': ['Open Sans Regular'],
-      'text-size': visibleLayers.showCommunes ? 10 : visibleLayers.showDepartements ? 11 : 12,
+      'text-size': visibleLayers.showCommunes ? 10 : visibleLayers.showDepartements ? 11 : visibleLayers.showRegions ? 12 : 16,
       'text-anchor': 'center',
       'text-offset': [0, 0]
     },
     paint: {
-      'text-color': '#374151',
-      'text-halo-color': '#ffffff',
+      'text-color': visibleLayers.showFrance ? '#ffffff' : '#374151',
+      'text-halo-color': visibleLayers.showFrance ? '#1f2937' : '#ffffff',
       'text-halo-width': 2,
       'text-opacity': visibleLayers.showLabels ? 1 : 0
     }
@@ -450,7 +487,7 @@ export const FranceMap: React.FC = () => {
           features={processedData?.features || []}
           selectedFeature={selectedFeature}
           onFeatureSelect={setSelectedFeature}
-          zoomLevel={activeDataInfo?.type || 'regions'}
+          zoomLevel={activeDataInfo?.type || 'france'}
         />
 
         {/* Tooltip */}

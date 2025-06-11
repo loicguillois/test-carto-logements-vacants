@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Building2, Home, Target } from 'lucide-react';
+import { Users, Building2, Home, Target, MapPin, Globe } from 'lucide-react';
 
 interface RegionTooltipProps {
   feature: any | null;
@@ -21,15 +21,65 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
   };
 
   const properties = feature.properties || {};
+  const isFranceLevel = properties.code === 'FR';
 
-  const stats = [
-    {
-      icon: Home,
-      label: 'Logements vacants +2ans',
-      value: formatNumber(properties.pp_vacant_plus_2ans_25),
-      color: 'text-red-600'
+  const getStats = () => {
+    const baseStats = [
+      {
+        icon: Home,
+        label: 'Logements vacants +2ans',
+        value: formatNumber(properties.pp_vacant_plus_2ans_25),
+        color: 'text-red-600'
+      }
+    ];
+
+    if (isFranceLevel) {
+      // Statistiques spéciales pour le niveau France
+      baseStats.push(
+        {
+          icon: MapPin,
+          label: 'Régions',
+          value: formatNumber(properties.regions),
+          color: 'text-blue-600'
+        },
+        {
+          icon: Building2,
+          label: 'Départements',
+          value: formatNumber(properties.departements),
+          color: 'text-green-600'
+        },
+        {
+          icon: Globe,
+          label: 'Communes',
+          value: formatNumber(properties.communes),
+          color: 'text-purple-600'
+        }
+      );
+    } else {
+      // Statistiques classiques pour les autres niveaux
+      if (properties.population) {
+        baseStats.push({
+          icon: Users,
+          label: 'Population',
+          value: formatNumber(properties.population),
+          color: 'text-blue-600'
+        });
+      }
+
+      if (properties.densite) {
+        baseStats.push({
+          icon: Target,
+          label: 'Densité',
+          value: `${formatNumber(properties.densite)} hab./km²`,
+          color: 'text-green-600'
+        });
+      }
     }
-  ];
+
+    return baseStats;
+  };
+
+  const stats = getStats();
 
   return (
     <div
@@ -43,6 +93,13 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
       <h3 className="font-semibold text-gray-800 mb-3 text-base">
         {properties.nom || 'Territoire'}
       </h3>
+      
+      {/* Indicateur de niveau */}
+      {isFranceLevel && (
+        <div className="mb-3 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full inline-block">
+          Niveau national
+        </div>
+      )}
       
       <div className="grid grid-cols-1 gap-3">
         {stats.map((stat, index) => {
@@ -62,6 +119,16 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
           );
         })}
       </div>
+
+      {/* Informations supplémentaires pour la France */}
+      {isFranceLevel && (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="text-xs text-gray-500 space-y-1">
+            <p><strong>Taux:</strong> {properties.tauxVacancePour1000}‰ hab.</p>
+            <p><strong>Superficie:</strong> {formatNumber(properties.superficie)} km²</p>
+          </div>
+        </div>
+      )}
       
       {/* Small arrow pointing to the region */}
       <div 
