@@ -390,7 +390,7 @@ export const FranceMap: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="text-center">
             <h1 className="text-3xl font-bold text-gray-800 mb-1">
-              Carte des Logements Vacants en France
+              Carte des logements vacants de plus de 2 ans en France
             </h1>
             <p className="text-sm text-gray-600">
               Logements vacants de plus de 2 ans (2025) • Contours officiels open data • Zoomez pour naviguer entre les niveaux
