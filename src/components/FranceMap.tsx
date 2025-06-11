@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import Map, { Source, Layer } from 'react-map-gl/maplibre';
 import { geoDataService } from '../services/geoDataService';
-import { MapMetric, ViewState, ZoomLevel, MapState, GeoJSONCollection } from '../types/mapTypes';
+import { MapMetric, ViewState, GeoJSONCollection } from '../types/mapTypes';
 import { MapControls } from './MapControls';
 import { MapLegend } from './MapLegend';
 import { RegionTooltip } from './RegionTooltip';
 import { MapStats } from './MapStats';
-import { ZoomControls } from './ZoomControls';
+import { ZoomInfo } from './ZoomInfo';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const INITIAL_VIEW_STATE: ViewState = {
@@ -17,16 +17,22 @@ const INITIAL_VIEW_STATE: ViewState = {
   pitch: 0
 };
 
+// Seuils de zoom pour l'affichage des différents niveaux
+const ZOOM_THRESHOLDS = {
+  REGIONS_ONLY: 5.5,
+  DEPARTEMENTS_VISIBLE: 6.5,
+  COMMUNES_VISIBLE: 8.5,
+  LABELS_VISIBLE: 7.0
+};
+
 export const FranceMap: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>(INITIAL_VIEW_STATE);
-  const [mapState, setMapState] = useState<MapState>({
-    zoomLevel: 'regions',
-    selectedRegion: null,
-    selectedDepartement: null,
-    selectedCommune: null
-  });
   
-  const [geoData, setGeoData] = useState<GeoJSONCollection | null>(null);
+  // Données géographiques pour tous les niveaux
+  const [regionsData, setRegionsData] = useState<GeoJSONCollection | null>(null);
+  const [departementsData, setDepartementsData] = useState<GeoJSONCollection | null>(null);
+  const [communesData, setCommunesData] = useState<GeoJSONCollection | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -63,48 +69,39 @@ export const FranceMap: React.FC = () => {
     }
   ];
 
-  // Load geographic data based on current zoom level
+  // Charger toutes les données géographiques au démarrage
   useEffect(() => {
-    const loadGeoData = async () => {
+    const loadAllGeoData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        let data: GeoJSONCollection;
-        
-        switch (mapState.zoomLevel) {
-          case 'regions':
-            data = await geoDataService.getRegions();
-            break;
-          case 'departements':
-            if (mapState.selectedRegion) {
-              data = await geoDataService.getDepartementsForRegion(mapState.selectedRegion);
-            } else {
-              data = await geoDataService.getDepartements();
-            }
-            break;
-          case 'communes':
-            if (mapState.selectedDepartement) {
-              data = await geoDataService.getCommunesForDepartement(mapState.selectedDepartement);
-            } else {
-              data = await geoDataService.getCommunes();
-            }
-            break;
-          default:
-            data = await geoDataService.getRegions();
-        }
+        // Charger toutes les données en parallèle
+        const [regions, departements, communes] = await Promise.all([
+          geoDataService.getRegions(),
+          geoDataService.getDepartements(),
+          geoDataService.getCommunes()
+        ]);
 
-        // Add real data to features
-        const enhancedData = {
-          ...data,
-          features: geoDataService.generateSampleData(
-            data.features, 
-            mapState.zoomLevel === 'regions' ? 'region' : 
-            mapState.zoomLevel === 'departements' ? 'departement' : 'commune'
-          )
+        // Enrichir avec les vraies données
+        const enhancedRegions = {
+          ...regions,
+          features: geoDataService.generateSampleData(regions.features, 'region')
         };
 
-        setGeoData(enhancedData);
+        const enhancedDepartements = {
+          ...departements,
+          features: geoDataService.generateSampleData(departements.features, 'departement')
+        };
+
+        const enhancedCommunes = {
+          ...communes,
+          features: geoDataService.generateSampleData(communes.features, 'commune')
+        };
+
+        setRegionsData(enhancedRegions);
+        setDepartementsData(enhancedDepartements);
+        setCommunesData(enhancedCommunes);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erreur lors du chargement des données');
         console.error('Error loading geo data:', err);
@@ -113,14 +110,42 @@ export const FranceMap: React.FC = () => {
       }
     };
 
-    loadGeoData();
-  }, [mapState.zoomLevel, mapState.selectedRegion, mapState.selectedDepartement]);
+    loadAllGeoData();
+  }, []);
 
-  // Calculate metric values for coloring
-  const { minValue, maxValue, processedGeoData } = useMemo(() => {
-    if (!geoData) return { minValue: 0, maxValue: 100, processedGeoData: null };
+  // Déterminer quelles couches afficher selon le niveau de zoom
+  const getVisibleLayers = useCallback(() => {
+    const zoom = viewState.zoom;
+    return {
+      showRegions: zoom < ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
+      showDepartements: zoom >= ZOOM_THRESHOLDS.DEPARTEMENTS_VISIBLE && zoom < ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
+      showCommunes: zoom >= ZOOM_THRESHOLDS.COMMUNES_VISIBLE,
+      showLabels: showLabels && zoom >= ZOOM_THRESHOLDS.LABELS_VISIBLE
+    };
+  }, [viewState.zoom, showLabels]);
 
-    const values = geoData.features
+  const visibleLayers = getVisibleLayers();
+
+  // Obtenir les données actives selon le niveau de zoom
+  const getActiveData = useCallback(() => {
+    if (visibleLayers.showCommunes && communesData) {
+      return { data: communesData, type: 'communes' as const };
+    } else if (visibleLayers.showDepartements && departementsData) {
+      return { data: departementsData, type: 'departements' as const };
+    } else if (regionsData) {
+      return { data: regionsData, type: 'regions' as const };
+    }
+    return null;
+  }, [visibleLayers, regionsData, departementsData, communesData]);
+
+  const activeDataInfo = getActiveData();
+
+  // Calculer les valeurs min/max et traiter les données pour la coloration
+  const { minValue, maxValue, processedData } = useMemo(() => {
+    if (!activeDataInfo) return { minValue: 0, maxValue: 100, processedData: null };
+
+    const { data } = activeDataInfo;
+    const values = data.features
       .map(f => f.properties?.[currentMetric.key] || 0)
       .filter(v => v > 0);
 
@@ -128,32 +153,27 @@ export const FranceMap: React.FC = () => {
     const max = Math.max(...values);
 
     const getColorForValue = (value: number): string => {
-      if (max === min) return 'rgb(34, 197, 94)'; // Vert par défaut
+      if (max === min) return 'rgb(34, 197, 94)';
       const ratio = (value - min) / (max - min);
       
-      // Gradient inversé : vert (faible) vers rouge (élevé)
       if (ratio < 0.25) {
-        // Vert foncé à vert clair
         const intensity = ratio / 0.25;
         return `rgb(${Math.round(34 + 100 * intensity)}, ${Math.round(197 - 63 * intensity)}, ${Math.round(94 - 25 * intensity)})`;
       } else if (ratio < 0.5) {
-        // Vert clair à jaune
         const intensity = (ratio - 0.25) / 0.25;
         return `rgb(${Math.round(134 + 121 * intensity)}, ${Math.round(134 + 121 * intensity)}, ${Math.round(69 + 31 * intensity)})`;
       } else if (ratio < 0.75) {
-        // Jaune à orange
         const intensity = (ratio - 0.5) / 0.25;
         return `rgb(${Math.round(255)}, ${Math.round(255 - 90 * intensity)}, ${Math.round(100 - 100 * intensity)})`;
       } else {
-        // Orange à rouge
         const intensity = (ratio - 0.75) / 0.25;
         return `rgb(${Math.round(255 - 35 * intensity)}, ${Math.round(165 - 96 * intensity)}, ${Math.round(0 + 69 * intensity)})`;
       }
     };
 
     const processed = {
-      ...geoData,
-      features: geoData.features.map(feature => ({
+      ...data,
+      features: data.features.map(feature => ({
         ...feature,
         properties: {
           ...feature.properties,
@@ -162,10 +182,10 @@ export const FranceMap: React.FC = () => {
       }))
     };
 
-    return { minValue: min, maxValue: max, processedGeoData: processed };
-  }, [geoData, currentMetric]);
+    return { minValue: min, maxValue: max, processedData: processed };
+  }, [activeDataInfo, currentMetric]);
 
-  // Handle feature interactions
+  // Gestion des interactions
   const handleFeatureHover = useCallback((event: any) => {
     if (event.features && event.features.length > 0) {
       const feature = event.features[0];
@@ -190,134 +210,106 @@ export const FranceMap: React.FC = () => {
 
       setSelectedFeature(feature);
 
-      // Handle zoom level transitions
-      if (mapState.zoomLevel === 'regions') {
-        setMapState(prev => ({
-          ...prev,
-          selectedRegion: featureCode,
-          zoomLevel: 'departements'
-        }));
+      // Centrer sur la feature sélectionnée et zoomer
+      if (feature.geometry && feature.geometry.coordinates) {
+        // Calcul simple du centroïde pour le centrage
+        let centroid: [number, number];
         
-        // Zoom to region bounds (simplified)
+        if (feature.geometry.type === 'Polygon') {
+          const coords = feature.geometry.coordinates[0];
+          centroid = coords.reduce(
+            (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
+            [0, 0]
+          ).map(sum => sum / coords.length) as [number, number];
+        } else if (feature.geometry.type === 'MultiPolygon') {
+          const coords = feature.geometry.coordinates[0][0];
+          centroid = coords.reduce(
+            (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
+            [0, 0]
+          ).map(sum => sum / coords.length) as [number, number];
+        } else {
+          return;
+        }
+
+        // Déterminer le niveau de zoom approprié
+        let targetZoom = viewState.zoom + 1.5;
+        if (visibleLayers.showRegions) {
+          targetZoom = Math.max(ZOOM_THRESHOLDS.DEPARTEMENTS_VISIBLE + 0.5, targetZoom);
+        } else if (visibleLayers.showDepartements) {
+          targetZoom = Math.max(ZOOM_THRESHOLDS.COMMUNES_VISIBLE + 0.5, targetZoom);
+        }
+
         setViewState(prev => ({
           ...prev,
-          zoom: Math.min(prev.zoom + 1.5, 8)
-        }));
-      } else if (mapState.zoomLevel === 'departements') {
-        setMapState(prev => ({
-          ...prev,
-          selectedDepartement: featureCode,
-          zoomLevel: 'communes'
-        }));
-        
-        setViewState(prev => ({
-          ...prev,
-          zoom: Math.min(prev.zoom + 2, 10)
+          longitude: centroid[0],
+          latitude: centroid[1],
+          zoom: Math.min(targetZoom, 12)
         }));
       }
     }
-  }, [selectedFeature, mapState.zoomLevel]);
+  }, [selectedFeature, visibleLayers]);
 
-  // Navigation functions
-  const handleZoomLevelChange = useCallback((level: ZoomLevel) => {
-    setMapState(prev => {
-      const newState = { ...prev, zoomLevel: level };
-      
-      if (level === 'regions') {
-        newState.selectedRegion = null;
-        newState.selectedDepartement = null;
-        newState.selectedCommune = null;
-        setViewState(INITIAL_VIEW_STATE);
-      } else if (level === 'departements') {
-        newState.selectedDepartement = null;
-        newState.selectedCommune = null;
-      }
-      
-      return newState;
-    });
+  // Fonction pour revenir à la vue France
+  const resetToFranceView = useCallback(() => {
+    setViewState(INITIAL_VIEW_STATE);
     setSelectedFeature(null);
   }, []);
 
-  const handleNavigateUp = useCallback(() => {
-    if (mapState.zoomLevel === 'communes') {
-      handleZoomLevelChange('departements');
-    } else if (mapState.zoomLevel === 'departements') {
-      handleZoomLevelChange('regions');
+  // Configuration des couches
+  const createLayerConfig = (layerId: string, strokeWidth: number = 1) => ({
+    fill: {
+      id: `${layerId}-fill`,
+      type: 'fill' as const,
+      paint: {
+        'fill-color': ['get', 'color'],
+        'fill-opacity': opacity
+      }
+    },
+    stroke: {
+      id: `${layerId}-stroke`,
+      type: 'line' as const,
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': strokeWidth,
+        'line-opacity': 0.8
+      }
+    },
+    highlight: {
+      id: `${layerId}-highlight`,
+      type: 'line' as const,
+      paint: {
+        'line-color': '#2563eb',
+        'line-width': 3,
+        'line-opacity': [
+          'case',
+          ['==', ['get', 'code'], selectedFeature?.properties?.code || ''],
+          1,
+          0
+        ]
+      }
     }
-  }, [mapState.zoomLevel, handleZoomLevelChange]);
+  });
 
-  // Get current region/departement names for breadcrumb
-  const getCurrentNames = () => {
-    let regionName = '';
-    let departementName = '';
-    
-    if (mapState.selectedRegion && geoData) {
-      // Find region name from previous data or current selection
-      regionName = selectedFeature?.properties?.nom || '';
-    }
-    
-    if (mapState.selectedDepartement && geoData) {
-      departementName = selectedFeature?.properties?.nom || '';
-    }
-    
-    return { regionName, departementName };
-  };
-
-  const { regionName, departementName } = getCurrentNames();
-
-  // Map layers configuration
-  const fillLayer = {
-    id: 'geo-fill',
-    type: 'fill' as const,
-    paint: {
-      'fill-color': ['get', 'color'],
-      'fill-opacity': opacity
-    }
-  };
-
-  const strokeLayer = {
-    id: 'geo-stroke',
-    type: 'line' as const,
-    paint: {
-      'line-color': '#ffffff',
-      'line-width': [
-        'case',
-        ['==', ['get', 'code'], selectedFeature?.properties?.code || ''],
-        3,
-        1
-      ],
-      'line-opacity': 0.8
-    }
-  };
-
-  const highlightLayer = {
-    id: 'geo-highlight',
-    type: 'line' as const,
-    paint: {
-      'line-color': '#2563eb',
-      'line-width': 4,
-      'line-opacity': [
-        'case',
-        ['==', ['get', 'code'], selectedFeature?.properties?.code || ''],
-        1,
-        0
-      ]
-    }
-  };
-
-  // Labels GeoJSON (centroids)
-  const labelsGeoJSON = useMemo(() => {
-    if (!processedGeoData) return null;
-
+  // Créer les données de labels
+  const createLabelsData = useCallback((data: GeoJSONCollection) => {
     return {
       type: 'FeatureCollection' as const,
-      features: processedGeoData.features.map(feature => {
-        // Simple centroid calculation for polygons
-        const coords = feature.geometry.coordinates[0];
-        const centroid = coords.reduce(
-          (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
-          [0, 0]
-        ).map(sum => sum / coords.length);
+      features: data.features.map(feature => {
+        let centroid: [number, number];
+        
+        if (feature.geometry.type === 'Polygon') {
+          const coords = feature.geometry.coordinates[0];
+          centroid = coords.reduce(
+            (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
+            [0, 0]
+          ).map(sum => sum / coords.length) as [number, number];
+        } else {
+          const coords = feature.geometry.coordinates[0][0];
+          centroid = coords.reduce(
+            (acc, coord) => [acc[0] + coord[0], acc[1] + coord[1]],
+            [0, 0]
+          ).map(sum => sum / coords.length) as [number, number];
+        }
 
         return {
           type: 'Feature' as const,
@@ -332,15 +324,15 @@ export const FranceMap: React.FC = () => {
         };
       })
     };
-  }, [processedGeoData]);
+  }, []);
 
   const labelLayer = {
-    id: 'geo-labels',
+    id: 'labels',
     type: 'symbol' as const,
     layout: {
       'text-field': ['get', 'nom'],
       'text-font': ['Open Sans Regular'],
-      'text-size': mapState.zoomLevel === 'communes' ? 10 : mapState.zoomLevel === 'departements' ? 11 : 12,
+      'text-size': visibleLayers.showCommunes ? 10 : visibleLayers.showDepartements ? 11 : 12,
       'text-anchor': 'center',
       'text-offset': [0, 0]
     },
@@ -348,7 +340,7 @@ export const FranceMap: React.FC = () => {
       'text-color': '#374151',
       'text-halo-color': '#ffffff',
       'text-halo-width': 2,
-      'text-opacity': showLabels ? 1 : 0
+      'text-opacity': visibleLayers.showLabels ? 1 : 0
     }
   };
 
@@ -357,11 +349,7 @@ export const FranceMap: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            Chargement des données géographiques...
-            {mapState.zoomLevel === 'departements' && ' (départements)'}
-            {mapState.zoomLevel === 'communes' && ' (communes)'}
-          </p>
+          <p className="text-gray-600">Chargement des données géographiques...</p>
         </div>
       </div>
     );
@@ -383,6 +371,9 @@ export const FranceMap: React.FC = () => {
     );
   }
 
+  const layerConfigs = createLayerConfig('active');
+  const labelsData = processedData ? createLabelsData(processedData) : null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -393,7 +384,7 @@ export const FranceMap: React.FC = () => {
               Carte des Logements Vacants en France
             </h1>
             <p className="text-sm text-gray-600">
-              Logements vacants de plus de 2 ans par {mapState.zoomLevel === 'regions' ? 'région' : mapState.zoomLevel === 'departements' ? 'département' : 'commune'} (2025) • Cliquez pour naviguer entre les niveaux
+              Logements vacants de plus de 2 ans (2025) • Zoomez pour naviguer entre les niveaux
             </p>
           </div>
         </div>
@@ -406,40 +397,37 @@ export const FranceMap: React.FC = () => {
           onMove={evt => setViewState(evt.viewState)}
           style={{ width: '100%', height: '100%' }}
           mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
-          interactiveLayerIds={['geo-fill']}
+          interactiveLayerIds={processedData ? ['active-fill'] : []}
           onMouseMove={handleFeatureHover}
           onMouseLeave={handleFeatureLeave}
           onClick={handleFeatureClick}
           cursor="pointer"
         >
-          {/* Geographic Data Source and Layers */}
-          {processedGeoData && (
-            <Source id="geo-data" type="geojson" data={processedGeoData}>
-              <Layer {...fillLayer} />
-              <Layer {...strokeLayer} />
-              <Layer {...highlightLayer} />
+          {/* Données géographiques actives */}
+          {processedData && (
+            <Source id="active-data" type="geojson" data={processedData}>
+              <Layer {...layerConfigs.fill} />
+              <Layer {...layerConfigs.stroke} />
+              <Layer {...layerConfigs.highlight} />
             </Source>
           )}
 
-          {/* Labels Source and Layer */}
-          {labelsGeoJSON && (
-            <Source id="labels" type="geojson" data={labelsGeoJSON}>
+          {/* Labels */}
+          {labelsData && (
+            <Source id="labels-data" type="geojson" data={labelsData}>
               <Layer {...labelLayer} />
             </Source>
           )}
         </Map>
 
-        {/* Zoom/Navigation Controls */}
-        <ZoomControls
-          mapState={mapState}
-          onZoomLevelChange={handleZoomLevelChange}
-          onNavigateUp={handleNavigateUp}
-          regionName={regionName}
-          departementName={departementName}
-          communeName={selectedFeature?.properties?.nom}
+        {/* Informations de zoom */}
+        <ZoomInfo
+          currentZoom={viewState.zoom}
+          visibleLayers={visibleLayers}
+          onResetView={resetToFranceView}
         />
 
-        {/* Map Controls */}
+        {/* Contrôles de la carte */}
         <MapControls
           currentMetric={currentMetric}
           onMetricChange={setCurrentMetric}
@@ -450,19 +438,19 @@ export const FranceMap: React.FC = () => {
           onOpacityChange={setOpacity}
         />
 
-        {/* Legend */}
+        {/* Légende */}
         <MapLegend
           currentMetric={currentMetric}
           minValue={minValue}
           maxValue={maxValue}
         />
 
-        {/* Stats Panel */}
+        {/* Panneau de statistiques */}
         <MapStats
-          features={processedGeoData?.features || []}
+          features={processedData?.features || []}
           selectedFeature={selectedFeature}
           onFeatureSelect={setSelectedFeature}
-          zoomLevel={mapState.zoomLevel}
+          zoomLevel={activeDataInfo?.type || 'regions'}
         />
 
         {/* Tooltip */}
