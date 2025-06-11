@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Building2, BarChart, Home, Target, MapPin, Globe } from 'lucide-react';
+import { Users, Building2, BarChart, Home, Target, MapPin, Globe, Anchor } from 'lucide-react';
 
 interface MapStatsProps {
   features: any[];
@@ -22,7 +22,24 @@ export const MapStats: React.FC<MapStatsProps> = ({
     const totalPopulation = features.reduce((sum, f) => sum + (f.properties?.population || 0), 0);
     const totalSuperficie = features.reduce((sum, f) => sum + (f.properties?.superficie || 0), 0);
 
-    return { totalVacants, avgTauxVacance, totalPopulation, totalSuperficie };
+    // Calculer les statistiques DOM-TOM si applicable
+    const domtomFeatures = features.filter(f => 
+      ['971', '972', '973', '974', '976'].includes(f.properties?.code) ||
+      ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(f.properties?.nom)
+    );
+    
+    const domtomVacants = domtomFeatures.reduce((sum, f) => sum + (f.properties?.pp_vacant_plus_2ans_25 || 0), 0);
+    const domtomPopulation = domtomFeatures.reduce((sum, f) => sum + (f.properties?.population || 0), 0);
+
+    return { 
+      totalVacants, 
+      avgTauxVacance, 
+      totalPopulation, 
+      totalSuperficie,
+      domtomVacants,
+      domtomPopulation,
+      hasDOMTOM: domtomFeatures.length > 0
+    };
   };
 
   const formatNumber = (num: number): string => {
@@ -31,6 +48,10 @@ export const MapStats: React.FC<MapStatsProps> = ({
 
   const globalStats = calculateStats();
   const properties = selectedFeature?.properties;
+  const isDOMTOM = selectedFeature && (
+    ['971', '972', '973', '974', '976'].includes(properties?.code) ||
+    ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(properties?.nom)
+  );
 
   const getStatsForLevel = () => {
     if (selectedFeature && properties) {
@@ -70,6 +91,17 @@ export const MapStats: React.FC<MapStatsProps> = ({
             bgColor: 'bg-purple-50'
           }
         );
+
+        // Ajouter les statistiques DOM-TOM pour la France
+        if (properties.vacanceDOMTOM) {
+          baseStats.push({
+            icon: Anchor,
+            label: 'Logements vacants DOM-TOM',
+            value: formatNumber(properties.vacanceDOMTOM),
+            color: 'text-orange-600',
+            bgColor: 'bg-orange-50'
+          });
+        }
       } else {
         baseStats.push(
           {
@@ -119,6 +151,17 @@ export const MapStats: React.FC<MapStatsProps> = ({
             bgColor: 'bg-green-50'
           }
         );
+
+        // Ajouter les stats DOM-TOM si présentes
+        if (globalStats.hasDOMTOM && globalStats.domtomVacants > 0) {
+          baseStats.push({
+            icon: Anchor,
+            label: 'Vacance DOM-TOM',
+            value: formatNumber(globalStats.domtomVacants),
+            color: 'text-orange-600',
+            bgColor: 'bg-orange-50'
+          });
+        }
       }
 
       return baseStats;
@@ -131,11 +174,15 @@ export const MapStats: React.FC<MapStatsProps> = ({
 
   const getTitle = () => {
     if (selectedFeature?.properties?.nom) {
-      return selectedFeature.properties.nom;
+      const name = selectedFeature.properties.nom;
+      if (isDOMTOM) {
+        return `${name} (DOM-TOM)`;
+      }
+      return name;
     }
     
     switch (zoomLevel) {
-      case 'france': return 'France entière';
+      case 'france': return 'France entière (métropole + outre-mer)';
       case 'regions': return 'Vue régions';
       case 'departements': return 'Vue départements';
       case 'communes': return 'Vue communes';
@@ -144,11 +191,15 @@ export const MapStats: React.FC<MapStatsProps> = ({
   };
 
   const getTerritoryCount = () => {
+    if (!globalStats) return '';
+    
+    const domtomSuffix = globalStats.hasDOMTOM ? ' (incluant DOM-TOM)' : '';
+    
     switch (zoomLevel) {
       case 'france': return '1 territoire national';
-      case 'regions': return `${features.length} régions`;
-      case 'departements': return `${features.length} départements`;
-      case 'communes': return `${features.length} communes`;
+      case 'regions': return `${features.length} régions${domtomSuffix}`;
+      case 'departements': return `${features.length} départements${domtomSuffix}`;
+      case 'communes': return `${features.length} communes${domtomSuffix}`;
       default: return '';
     }
   };
@@ -208,9 +259,34 @@ export const MapStats: React.FC<MapStatsProps> = ({
             <p className="mb-1">
               <strong>Densité:</strong> {formatNumber(properties?.densite || 0)} hab./km²
             </p>
-            <p>
+            <p className="mb-1">
               <strong>Superficie:</strong> {formatNumber(properties?.superficie || 0)} km²
             </p>
+            {properties?.tauxVacanceDOMTOM && (
+              <p className="mb-1 text-orange-600">
+                <strong>Taux DOM-TOM:</strong> {properties.tauxVacanceDOMTOM}‰ habitants
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Informations spécifiques DOM-TOM */}
+      {isDOMTOM && selectedFeature && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center gap-1 mb-2">
+            <Anchor className="w-4 h-4 text-orange-600" />
+            <span className="text-xs font-medium text-orange-800">Territoire d'outre-mer</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            <p className="mb-1">
+              <strong>Statut:</strong> Département/Région d'outre-mer français
+            </p>
+            {properties?.tauxVacancePour1000 && (
+              <p className="mb-1">
+                <strong>Taux local:</strong> {properties.tauxVacancePour1000}‰ habitants
+              </p>
+            )}
           </div>
         </div>
       )}

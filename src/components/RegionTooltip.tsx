@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Building2, Home, Target, MapPin, Globe } from 'lucide-react';
+import { Users, Building2, Home, Target, MapPin, Globe, Anchor } from 'lucide-react';
 
 interface RegionTooltipProps {
   feature: any | null;
@@ -22,6 +22,8 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
 
   const properties = feature.properties || {};
   const isFranceLevel = properties.code === 'FR';
+  const isDOMTOM = ['971', '972', '973', '974', '976'].includes(properties.code) || 
+                   ['Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte'].includes(properties.nom);
 
   const getStats = () => {
     const baseStats = [
@@ -55,6 +57,16 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
           color: 'text-purple-600'
         }
       );
+
+      // Ajouter les statistiques DOM-TOM
+      if (properties.vacanceDOMTOM) {
+        baseStats.push({
+          icon: Anchor,
+          label: 'Vacance DOM-TOM',
+          value: formatNumber(properties.vacanceDOMTOM),
+          color: 'text-orange-600'
+        });
+      }
     } else {
       // Statistiques classiques pour les autres niveaux
       if (properties.population) {
@@ -97,7 +109,15 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
       {/* Indicateur de niveau */}
       {isFranceLevel && (
         <div className="mb-3 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full inline-block">
-          Niveau national
+          Niveau national (métropole + outre-mer)
+        </div>
+      )}
+
+      {/* Indicateur DOM-TOM */}
+      {isDOMTOM && (
+        <div className="mb-3 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full inline-block flex items-center gap-1">
+          <Anchor className="w-3 h-3" />
+          Département/Région d'outre-mer
         </div>
       )}
       
@@ -124,8 +144,26 @@ export const RegionTooltip: React.FC<RegionTooltipProps> = ({
       {isFranceLevel && (
         <div className="mt-3 pt-3 border-t border-gray-200">
           <div className="text-xs text-gray-500 space-y-1">
-            <p><strong>Taux:</strong> {properties.tauxVacancePour1000}‰ hab.</p>
+            <p><strong>Taux national:</strong> {properties.tauxVacancePour1000}‰ hab.</p>
             <p><strong>Superficie:</strong> {formatNumber(properties.superficie)} km²</p>
+            {properties.tauxVacanceDOMTOM && (
+              <p><strong>Taux DOM-TOM:</strong> {properties.tauxVacanceDOMTOM}‰ hab.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Informations spécifiques DOM-TOM */}
+      {isDOMTOM && (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            <p className="flex items-center gap-1">
+              <Anchor className="w-3 h-3" />
+              Territoire d'outre-mer français
+            </p>
+            {properties.tauxVacancePour1000 && (
+              <p className="mt-1"><strong>Taux:</strong> {properties.tauxVacancePour1000}‰ hab.</p>
+            )}
           </div>
         </div>
       )}
