@@ -7,7 +7,6 @@ import { MapLegend } from './MapLegend';
 import { RegionTooltip } from './RegionTooltip';
 import { MapStats } from './MapStats';
 import { ZoomInfo } from './ZoomInfo';
-import { franceGeoJSON } from '../data/franceData';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const INITIAL_VIEW_STATE: ViewState = {
@@ -85,8 +84,9 @@ export const FranceMap: React.FC = () => {
       setError(null);
       
       try {
-        // Charger les données France
-        setFranceData(franceGeoJSON);
+        // Charger les contours officiels de la France depuis l'open data
+        const franceContours = await geoDataService.getFranceContours();
+        setFranceData(franceContours);
 
         // Charger toutes les autres données en parallèle
         const [regions, departements, communes] = await Promise.all([
@@ -386,7 +386,8 @@ export const FranceMap: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des données géographiques...</p>
+          <p className="text-gray-600">Chargement des contours officiels de la France...</p>
+          <p className="text-sm text-gray-500 mt-2">Données géographiques open data</p>
         </div>
       </div>
     );
@@ -421,7 +422,7 @@ export const FranceMap: React.FC = () => {
               Carte des Logements Vacants en France
             </h1>
             <p className="text-sm text-gray-600">
-              Logements vacants de plus de 2 ans (2025) • Zoomez pour naviguer entre les niveaux
+              Logements vacants de plus de 2 ans (2025) • Contours officiels open data • Zoomez pour naviguer entre les niveaux
             </p>
           </div>
         </div>

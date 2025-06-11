@@ -26,28 +26,3 @@ export const calculateFranceDerivedMetrics = () => {
     pourcentageVacance: Math.round((data.pp_vacant_plus_2ans_25 / (data.population * 0.45)) * 100 * 100) / 100 // Estimation basée sur ~0.45 logement par habitant
   };
 };
-
-// Données géographiques simplifiées pour la France entière
-export const franceGeoJSON = {
-  type: 'FeatureCollection' as const,
-  features: [
-    {
-      type: 'Feature' as const,
-      properties: {
-        code: 'FR',
-        nom: 'France',
-        ...calculateFranceDerivedMetrics()
-      },
-      geometry: {
-        type: 'Polygon' as const,
-        coordinates: [[
-          [-5.5, 41.0],  // Sud-ouest
-          [10.0, 41.0],  // Sud-est
-          [10.0, 51.5],  // Nord-est
-          [-5.5, 51.5],  // Nord-ouest
-          [-5.5, 41.0]   // Fermeture
-        ]]
-      }
-    }
-  ]
-};
